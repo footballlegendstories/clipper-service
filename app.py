@@ -17,7 +17,7 @@ def home():
 @app.post("/clip")
 async def clip_video(req: Request):
     """
-    Download a YouTube video, cut the specified time segment, and return it as a file.
+    Download a YouTube video using yt-dlp (with cookies), cut a specific clip using ffmpeg.
     Input JSON:
     {
         "videoUrl": "https://www.youtube.com/watch?v=xxxx",
@@ -30,7 +30,6 @@ async def clip_video(req: Request):
     start = data.get("start")
     end = data.get("end")
 
-    # Validate inputs
     if not video_url or not start or not end:
         return JSONResponse(
             {"error": "Missing required parameters: videoUrl, start, end"},
@@ -42,12 +41,20 @@ async def clip_video(req: Request):
         video_path = os.path.join(tmpdir, "input.mp4")
         clip_path = os.path.join(tmpdir, "clip.mp4")
 
-        # ✅ Download video using yt-dlp
-        ydl_opts = {"outtmpl": video_path, "format": "mp4"}
+        # ✅ Use cookies if file exists
+        cookie_file = "youtube_cookies.txt"
+        ydl_opts = {
+            "outtmpl": video_path,
+            "format": "mp4",
+        }
+
+        if os.path.exists(cookie_file):
+            ydl_opts["cookiefile"] = cookie_file
+
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             ydl.download([video_url])
 
-        # ✅ Use ffmpeg to trim the clip
+        # ✅ Cut the requested segment with ffmpeg
         subprocess.run(
             [
                 "ffmpeg",
@@ -66,9 +73,7 @@ async def clip_video(req: Request):
             stderr=subprocess.DEVNULL,
         )
 
-        # ✅ Return the video clip
         return FileResponse(clip_path, media_type="video/mp4", filename="clip.mp4")
 
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
-
