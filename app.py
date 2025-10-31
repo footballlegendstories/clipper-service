@@ -82,10 +82,14 @@ async def clip_video(req: Request):
         logo_path = "logo.png"
         logo_exists = os.path.exists(logo_path)
 
-        # ✅ Base crop/scale filter
-        vf_filter = "crop=(ih*9/16):ih,scale=1080:1920"
+        # ✅ Build base resize + pad filter
+        # This keeps full video visible and fits it into 9:16 frame (1080x1920)
+        vf_filter = (
+            "scale=w=1080:h=1920:force_original_aspect_ratio=decrease,"
+            "pad=1080:1920:(ow-iw)/2:(oh-ih)/2:black"
+        )
 
-        # ✅ Add subtitles if available
+        # ✅ Add subtitles
         if subs_path:
             vf_filter += f",subtitles={subs_path}"
 
@@ -93,12 +97,14 @@ async def clip_video(req: Request):
         ffmpeg_cmd = ["ffmpeg", "-i", raw_clip]
 
         if logo_exists:
-            # Use second input for logo overlay
+            # Overlay logo in bottom-right corner
             ffmpeg_cmd += [
                 "-i",
                 logo_path,
                 "-filter_complex",
-                f"{vf_filter}[base];[1:v][base]overlay=W-w-50:H-h-50",
+                f"[0:v]scale=w=1080:h=1920:force_original_aspect_ratio=decrease,"
+                f"pad=1080:1920:(ow-iw)/2:(oh-ih)/2:black[bg];"
+                f"[bg][1:v]overlay=W-w-50:H-h-50",
             ]
         else:
             ffmpeg_cmd += ["-vf", vf_filter]
